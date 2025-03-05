@@ -137,9 +137,8 @@ public class AdminDashboard extends Application {
 
     // Enum for sections
     public enum Section {
-        NEWS, EVENTS, VIEW_NEWS, VIEW_EVENTS, DONATIONS, VOLUNTEERS, DISASTERS
+        NEWS, EVENTS, VIEW_NEWS, VIEW_EVENTS, DONATIONS, VOLUNTEERS, ALERTS
     }
-
     // Update view based on selected section from the sidebar
     private void updateView(BorderPane layout, Section section) {
         VBox newSection;
@@ -162,8 +161,8 @@ public class AdminDashboard extends Application {
             case VOLUNTEERS:
                 newSection = createVolunteersSection();
                 break;
-            case DISASTERS:
-                newSection = createDisastersSection();
+            case ALERTS:
+                newSection = createAlertsSection();
                 break;
             default:
                 newSection = createDashboard();
@@ -171,7 +170,6 @@ public class AdminDashboard extends Application {
         }
         layout.setCenter(newSection);
     }
-
     // -------------------- Sidebar --------------------
     private VBox createSidebar(BorderPane layout) {
         VBox sidebar = new VBox(15);
@@ -184,13 +182,14 @@ public class AdminDashboard extends Application {
         adminLabel.setStyle("-fx-text-fill: #ECF0F1; -fx-padding: 5px;");
         sidebar.getChildren().add(adminLabel);
 
-        String[] items = {"News", "Events", "Donations", "Volunteers", "Disasters"};
+        String[] items = {"News", "Events", "Donations", "Volunteers", "Alerts"};
         for (String item : items) {
             Button button = new Button(item);
             button.setPrefWidth(200);
             button.setStyle("-fx-background-color: #34495E; -fx-text-fill: #ECF0F1; -fx-font-size: 16px; -fx-background-radius: 5px; -fx-padding: 10px;");
             button.setOnMouseEntered(e -> button.setStyle("-fx-background-color: #1ABC9C; -fx-text-fill: #FFFFFF; -fx-background-radius: 5px; -fx-padding: 10px;"));
             button.setOnMouseExited(e -> button.setStyle("-fx-background-color: #34495E; -fx-text-fill: #ECF0F1; -fx-background-radius: 5px; -fx-padding: 10px;"));
+
             if (item.equals("News")) {
                 button.setOnAction(e -> updateView(layout, Section.NEWS));
             } else if (item.equals("Events")) {
@@ -199,15 +198,15 @@ public class AdminDashboard extends Application {
                 button.setOnAction(e -> updateView(layout, Section.DONATIONS));
             } else if (item.equals("Volunteers")) {
                 button.setOnAction(e -> updateView(layout, Section.VOLUNTEERS));
-            } else if (item.equals("Disasters")) {
-                button.setOnAction(e -> updateView(layout, Section.DISASTERS));
+            } else if (item.equals("Alerts")) {
+                button.setOnAction(e -> updateView(layout, Section.ALERTS));
             }
+
             VBox.setMargin(button, new Insets(10, 0, 10, 0));
             sidebar.getChildren().add(button);
         }
         return sidebar;
     }
-
     // -------------------- Dashboard --------------------
     private VBox createDashboard() {
         VBox dashboard = new VBox();
@@ -1667,6 +1666,16 @@ public class AdminDashboard extends Application {
         alert.setTitle(title);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+    
+    private VBox createAlertsSection() {
+        VBox alertsSection = new VBox(10);
+        alertsSection.setPadding(new Insets(20));
+        Label alertsLabel = new Label("Alerts Management");
+        alertsLabel.setFont(Font.font("Roboto", FontWeight.BOLD, 24));
+        alertsLabel.setStyle("-fx-text-fill: #2C3E50;");
+        alertsSection.getChildren().add(alertsLabel);
+        return alertsSection;
     }
 
     // -------------------- Model Classes --------------------
