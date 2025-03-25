@@ -1,7 +1,11 @@
 package admin;
-
+import java.sql.ResultSet;
+import java.util.Optional;
+import javafx.stage.Modality;
+import java.sql.*;
 import java.time.LocalTime;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -16,10 +20,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Line;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.scene.control.TextArea;
-import java.sql.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
@@ -35,8 +37,10 @@ public class AdminDashboard extends Application {
 
     // ---------- News Section UI Components ----------
     private TextField addTitleField;
+    private TableView<Volunteer> volunteersTable;
     private TextArea addDescriptionArea;
     private TextField addPlaceField;
+    private Connection connection;  // Database connection
     private TextArea editEventDescriptionArea;
     private DatePicker addDatePicker;
     private Spinner<Integer> addHourSpinner;
@@ -107,34 +111,45 @@ public class AdminDashboard extends Application {
 
     // Initialize database and tables if they don't exist
     private void initializeDatabase() {
-        String createNewsTable = "CREATE TABLE IF NOT EXISTS news (" +
-                "news_id INT AUTO_INCREMENT PRIMARY KEY, " +
-                "title VARCHAR(255) NOT NULL, " +
-                "description TEXT NOT NULL, " +
-                "place VARCHAR(255) NOT NULL, " +
-                "date DATE NOT NULL, " +
-                "time TIME NOT NULL)";
-
-        String createEventsTable = "CREATE TABLE IF NOT EXISTS events (" +
+        try {
+            // Initialize the connection
+            connection = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+            
+            String createEventsTable = "CREATE TABLE IF NOT EXISTS events (" +
                 "event_id INT AUTO_INCREMENT PRIMARY KEY, " +
-                "title VARCHAR(255) NOT NULL, " +
-                "state VARCHAR(255) NOT NULL, " +
-                "district VARCHAR(255) NOT NULL, " +
-                "place VARCHAR(255) NOT NULL, " +
-                "description TEXT NOT NULL, " +
-                "date DATE NOT NULL, " +
-                "time TIME NOT NULL)";
+                "title VARCHAR(255) NOT NULL)";
 
-        try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
-             Statement stmt = conn.createStatement()) {
-            stmt.execute(createNewsTable);
-            stmt.execute(createEventsTable);
+            String createVolunteersTable = "CREATE TABLE IF NOT EXISTS volunteers (" +
+                "volunteer_id INT AUTO_INCREMENT PRIMARY KEY, " +
+                "firstname VARCHAR(255) NOT NULL, " +
+                "lastname VARCHAR(255) NOT NULL, " +
+                "user_id VARCHAR(255) NOT NULL, " +
+                "event_id INT, " +
+                "ph_no VARCHAR(20) NOT NULL)";
+
+            try (Statement stmt = connection.createStatement()) {
+                // Create tables
+                stmt.execute(createEventsTable);
+                stmt.execute(createVolunteersTable);
+                
+                // Add foreign key only if both tables exist
+                ResultSet eventsTable = connection.getMetaData().getTables(null, null, "events", null);
+                ResultSet volunteersTable = connection.getMetaData().getTables(null, null, "volunteers", null);
+                
+                if (eventsTable.next() && volunteersTable.next()) {
+                    try {
+                        stmt.execute("ALTER TABLE volunteers ADD CONSTRAINT fk_volunteer_event " +
+                                   "FOREIGN KEY (event_id) REFERENCES events(event_id)");
+                    } catch (SQLException e) {
+                        System.out.println("Foreign key constraint already exists or could not be created");
+                    }
+                }
+            }
         } catch (SQLException e) {
             e.printStackTrace();
-            showAlert("Error", "Failed to initialize database.");
+            showAlert("Database Error", "Failed to initialize database: " + e.getMessage());
         }
     }
-
     // Enum for sections
     public enum Section {
         NEWS, EVENTS, VIEW_NEWS, VIEW_EVENTS, DONATIONS, VOLUNTEERS, ALERTS
@@ -963,7 +978,7 @@ public class AdminDashboard extends Application {
 
         return viewNewsPage;
     }
-
+   
     // -------------------- View Events Page --------------------
     private VBox createViewEventsPage() {
         VBox viewEventsPage = new VBox(20);
@@ -1120,7 +1135,28 @@ public class AdminDashboard extends Application {
     private void toggleColumnVisibility(TableColumn<Event, ?> column, boolean isVisible) {
         column.setVisible(isVisible);
     }
+    
+   
 
+  
+    private void refreshVolunteersTable() {
+        try {
+            ObservableList<Volunteer> volunteers = getVolunteersListFromDatabase();
+            if (volunteersTable == null) {
+                System.err.println("Volunteers table is not initialized");
+                return;
+            }
+            Platform.runLater(() -> {
+                volunteersTable.setItems(volunteers);
+                if (volunteers.isEmpty()) {
+                    showAlert("Information", "No volunteers found in database");
+                }
+            });
+        } catch (Exception e) {
+            Platform.runLater(() -> 
+                showAlert("Error", "Failed to refresh volunteers: " + e.getMessage()));
+        }
+    }
     // -------------------- Popup for Full Description --------------------
     private void showFullDescriptionPopup(String description) {
         Stage popupStage = new Stage();
@@ -1151,26 +1187,10 @@ public class AdminDashboard extends Application {
     }
 
     // -------------------- Volunteers Section --------------------
-    private VBox createVolunteersSection() {
-        VBox volunteersSection = new VBox(10);
-        volunteersSection.setPadding(new Insets(20));
-        Label volunteersLabel = new Label("Volunteer Management");
-        volunteersLabel.setFont(Font.font("Roboto", FontWeight.BOLD, 24));
-        volunteersLabel.setStyle("-fx-text-fill: #2C3E50;");
-        volunteersSection.getChildren().add(volunteersLabel);
-        return volunteersSection;
-    }
+    
 
     // -------------------- Disasters Section --------------------
-    private VBox createDisastersSection() {
-        VBox disastersSection = new VBox(10);
-        disastersSection.setPadding(new Insets(20));
-        Label disastersLabel = new Label("Disaster Management");
-        disastersLabel.setFont(Font.font("Roboto", FontWeight.BOLD, 24));
-        disastersLabel.setStyle("-fx-text-fill: #2C3E50;");
-        disastersSection.getChildren().add(disastersLabel);
-        return disastersSection;
-    }
+   
 
     // -------------------- News Event Handlers --------------------
     private void handleAddNews() {
@@ -1320,6 +1340,36 @@ public class AdminDashboard extends Application {
         // Clear input fields
         clearAddEventFields(); // Clear all fields, including time and description
     }
+   
+   
+
+    private ObservableList<Volunteer> getVolunteersListFromDatabase() {
+        ObservableList<Volunteer> volunteersList = FXCollections.observableArrayList();
+        String sql = "SELECT volunteer_id, firstname, lastname, user_id, event_id, ph_no FROM volunteers";
+
+        try (Connection conn = DatabaseManager.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                volunteersList.add(new Volunteer(
+                    rs.getInt("volunteer_id"),
+                    rs.getString("firstname"),
+                    rs.getString("lastname"),
+                    rs.getString("user_id"),
+                    rs.getString("event_id"),  // Changed to getString
+                    rs.getString("ph_no")
+                ));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            showAlert("Database Error", "Failed to load volunteers: " + e.getMessage());
+        }
+
+        return volunteersList;
+    }
+
+    
     private void loadEventForEdit() {
         String selectedEvent = editEventComboBox.getValue();
         if (selectedEvent == null || selectedEvent.trim().isEmpty()) {
@@ -1523,7 +1573,7 @@ public class AdminDashboard extends Application {
             showAlert("Error", "Failed to save event to the database.");
         }
     }
-
+    
     private String[] getEventDetails(String title) {
         String sql = "SELECT event_id, date, time, place, state, district, description FROM events WHERE title = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
@@ -1677,7 +1727,137 @@ public class AdminDashboard extends Application {
         alertsSection.getChildren().add(alertsLabel);
         return alertsSection;
     }
+   
 
+    private VBox createVolunteersSection() {
+        VBox volunteersSection = new VBox(20);
+        volunteersSection.setPadding(new Insets(20));
+        volunteersSection.setAlignment(Pos.TOP_CENTER);
+
+        // Header
+        Label header = new Label("Volunteer Management");
+        header.setFont(Font.font("Roboto", FontWeight.BOLD, 28));
+        header.setStyle("-fx-text-fill: #2C3E50;");
+
+        // Initialize and setup the table
+        volunteersTable = new TableView<>();
+        setupVolunteersTableColumns();
+
+        // Add components to the layout
+        volunteersSection.getChildren().addAll(header, volunteersTable);
+        VBox.setVgrow(volunteersTable, Priority.ALWAYS);
+
+        // Load initial data
+        refreshVolunteersTable();
+
+        return volunteersSection;
+    }
+
+    private void setupVolunteersTableColumns() {
+        volunteersTable.getColumns().clear();
+
+        // ID Column
+        TableColumn<Volunteer, Integer> idCol = new TableColumn<>("Volunteer ID");
+        idCol.setCellValueFactory(new PropertyValueFactory<>("volunteerId"));
+        idCol.setStyle("-fx-alignment: CENTER;");
+        idCol.setPrefWidth(100);
+
+        // Event ID Column
+        TableColumn<Volunteer, String> eventIdCol = new TableColumn<>("Event ID");
+        eventIdCol.setCellValueFactory(new PropertyValueFactory<>("eventId"));
+        eventIdCol.setStyle("-fx-alignment: CENTER;");
+        eventIdCol.setPrefWidth(100);
+
+        // First Name Column
+        TableColumn<Volunteer, String> firstNameCol = new TableColumn<>("First Name");
+        firstNameCol.setCellValueFactory(new PropertyValueFactory<>("firstname"));
+        firstNameCol.setStyle("-fx-alignment: CENTER;");
+        firstNameCol.setPrefWidth(150);
+
+        // Last Name Column
+        TableColumn<Volunteer, String> lastNameCol = new TableColumn<>("Last Name");
+        lastNameCol.setCellValueFactory(new PropertyValueFactory<>("lastname"));
+        lastNameCol.setStyle("-fx-alignment: CENTER;");
+        lastNameCol.setPrefWidth(150);
+
+        // Phone Column
+        TableColumn<Volunteer, String> phoneCol = new TableColumn<>("Phone Number");
+        phoneCol.setCellValueFactory(new PropertyValueFactory<>("phoneNumber"));
+        phoneCol.setStyle("-fx-alignment: CENTER;");
+        phoneCol.setPrefWidth(150);
+
+        // Action Column with Add and Delete buttons
+        TableColumn<Volunteer, Void> actionCol = new TableColumn<>("Actions");
+        actionCol.setPrefWidth(200);
+        actionCol.setStyle("-fx-alignment: CENTER;");
+        
+        actionCol.setCellFactory(param -> new TableCell<>() {
+            private final Button addButton = new Button("Add");
+            private final Button deleteButton = new Button("Delete");
+            private final HBox buttons = new HBox(5, addButton, deleteButton);
+
+            {
+                buttons.setAlignment(Pos.CENTER);
+                
+                // Style the buttons
+                addButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
+                deleteButton.setStyle("-fx-background-color: #F44336; -fx-text-fill: white;");
+                
+                // Add button action - just shows a message
+                addButton.setOnAction(event -> {
+                    Volunteer volunteer = getTableView().getItems().get(getIndex());
+                    showAlert("Success", "Volunteer added successfully!");
+                });
+                
+                // Delete button action - actually deletes from database
+                deleteButton.setOnAction(event -> {
+                    Volunteer volunteer = getTableView().getItems().get(getIndex());
+                    deleteVolunteer(volunteer);
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(buttons);
+                }
+            }
+        });
+
+        volunteersTable.getColumns().addAll(idCol, eventIdCol, firstNameCol, lastNameCol, phoneCol, actionCol);
+        
+        // Make columns resize equally
+        volunteersTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+    }
+
+    private void deleteVolunteer(Volunteer volunteer) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Confirm Deletion");
+        alert.setHeaderText("Are you sure you want to delete this volunteer?");
+        alert.setContentText("Volunteer: " + volunteer.getFirstname() + " " + volunteer.getLastname());
+
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            deleteVolunteerFromDatabase(volunteer);
+            refreshVolunteersTable();
+        }
+    }
+
+    private void deleteVolunteerFromDatabase(Volunteer volunteer) {
+        String sql = "DELETE FROM volunteers WHERE volunteer_id = ?";
+        try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, volunteer.getVolunteerId());
+            pstmt.executeUpdate();
+            showAlert("Success", "Volunteer deleted successfully!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            showAlert("Database Error", "Failed to delete volunteer: " + e.getMessage());
+        }
+    }
     // -------------------- Model Classes --------------------
     public static class News {
         private final int id;
@@ -1775,4 +1955,51 @@ public class AdminDashboard extends Application {
             return time;
         }
     }
-}
+    public static class Volunteer {
+        private int volunteerId;
+        private String firstname;
+        private String lastname;
+        private String userId;
+        private String eventId;  // Changed to String to match your usage
+        private String phoneNumber;
+
+        // Constructor that matches your usage in line 1232
+        public Volunteer(int volunteerId, String firstname, String lastname, 
+                        String userId, String phoneNumber) {
+            this.volunteerId = volunteerId;
+            this.firstname = firstname;
+            this.lastname = lastname;
+            this.userId = userId;
+            this.phoneNumber = phoneNumber;
+        }
+
+        // Additional constructor if needed
+        public Volunteer(int volunteerId, String firstname, String lastname, 
+                        String userId, String eventId, String phoneNumber) {
+            this.volunteerId = volunteerId;
+            this.firstname = firstname;
+            this.lastname = lastname;
+            this.userId = userId;
+            this.eventId = eventId;
+            this.phoneNumber = phoneNumber;
+        }
+
+        // Getters and setters
+        public int getVolunteerId() { return volunteerId; }
+        public void setVolunteerId(int volunteerId) { this.volunteerId = volunteerId; }
+        
+        public String getFirstname() { return firstname; }
+        public void setFirstname(String firstname) { this.firstname = firstname; }
+        
+        public String getLastname() { return lastname; }
+        public void setLastname(String lastname) { this.lastname = lastname; }
+        
+        public String getUserId() { return userId; }
+        public void setUserId(String userId) { this.userId = userId; }
+        
+        public String getEventId() { return eventId; }
+        public void setEventId(String eventId) { this.eventId = eventId; }
+        
+        public String getPhoneNumber() { return phoneNumber; }
+        public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+    }}
