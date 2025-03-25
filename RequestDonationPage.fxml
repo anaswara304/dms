@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+<AnchorPane prefHeight="600" prefWidth="1000" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="RequestDonationController">
+    <VBox spacing="20" alignment="CENTER" layoutX="300" layoutY="100" prefWidth="400">
+        <!-- Header -->
+        <Text text="REQUEST DONATION" style="-fx-font-size: 32px; -fx-font-weight: bold;">
+            <font>
+                <Font name="Poppins SemiBold" size="32"/>
+            </font>
+        </Text>
+        
+        <!-- User ID Field -->
+        <VBox spacing="5">
+            <Label text="User ID:" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <TextField fx:id="userIdField" promptText="Enter your User ID" prefWidth="300"/>
+        </VBox>
+        
+        <!-- Loss Details -->
+        <VBox spacing="5">
+            <Label text="Amount Needed (₹):" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <TextField fx:id="amountNeededField" promptText="Enter amount needed" prefWidth="300"/>
+        </VBox>
+        
+        <!-- Damage Description -->
+        <VBox spacing="5">
+            <Label text="Reason for Request:" style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <TextArea fx:id="reasonField" promptText="Explain why you need assistance" prefWidth="300" prefHeight="100"/>
+        </VBox>
+        
+        <!-- Submit Button -->
+        <Button fx:id="submitRequestButton" text="SUBMIT REQUEST" 
+                style="-fx-background-color: #5a748a; -fx-text-fill: white; -fx-font-size: 16px; -fx-padding: 10 20;"/>
+    </VBox>
+</AnchorPane>
