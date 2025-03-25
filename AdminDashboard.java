@@ -1,4 +1,17 @@
 package admin;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.StackPane;
+import javafx.geometry.Insets;
+import javafx.scene.text.Text;
+import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.scene.control.TextInputDialog;
+import java.util.Optional;
+import java.sql.PreparedStatement;
+import javafx.scene.paint.Color;
+import javafx.scene.control.TableCell;
+import javafx.scene.layout.HBox;
 import java.sql.ResultSet;
 import java.util.Optional;
 import javafx.stage.Modality;
@@ -37,6 +50,9 @@ public class AdminDashboard extends Application {
 
     // ---------- News Section UI Components ----------
     private TextField addTitleField;
+    
+    private TableView<Donation> donationsTable;
+    private TableView<Allocation> allocationsTable;  // Corrected spelling
     private TableView<Volunteer> volunteersTable;
     private TextArea addDescriptionArea;
     private TextField addPlaceField;
@@ -1176,15 +1192,7 @@ public class AdminDashboard extends Application {
     }
 
     // -------------------- Donations Section --------------------
-    private VBox createDonationsSection() {
-        VBox donationsSection = new VBox(10);
-        donationsSection.setPadding(new Insets(20));
-        Label donationsLabel = new Label("Donation Management");
-        donationsLabel.setFont(Font.font("Roboto", FontWeight.BOLD, 24));
-        donationsLabel.setStyle("-fx-text-fill: #2C3E50;");
-        donationsSection.getChildren().add(donationsLabel);
-        return donationsSection;
-    }
+   
 
     // -------------------- Volunteers Section --------------------
     
@@ -1343,33 +1351,151 @@ public class AdminDashboard extends Application {
    
    
 
-    private ObservableList<Volunteer> getVolunteersListFromDatabase() {
-        ObservableList<Volunteer> volunteersList = FXCollections.observableArrayList();
-        String sql = "SELECT volunteer_id, firstname, lastname, user_id, event_id, ph_no FROM volunteers";
+    private void setupVolunteersTableColumns() {
+        volunteersTable.getColumns().clear();
 
-        try (Connection conn = DatabaseManager.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        // ID Column
+        TableColumn<Volunteer, Integer> idCol = new TableColumn<>("Volunteer ID");
+        idCol.setCellValueFactory(new PropertyValueFactory<>("volunteerId"));
+        idCol.setStyle("-fx-alignment: CENTER;");
+        idCol.setPrefWidth(100);
 
-            while (rs.next()) {
-                volunteersList.add(new Volunteer(
-                    rs.getInt("volunteer_id"),
-                    rs.getString("firstname"),
-                    rs.getString("lastname"),
-                    rs.getString("user_id"),
-                    rs.getString("event_id"),  // Changed to getString
-                    rs.getString("ph_no")
-                ));
+        // Event ID Column
+        TableColumn<Volunteer, String> eventIdCol = new TableColumn<>("Event ID");
+        eventIdCol.setCellValueFactory(new PropertyValueFactory<>("eventId"));
+        eventIdCol.setStyle("-fx-alignment: CENTER;");
+        eventIdCol.setPrefWidth(100);
+
+        // First Name Column
+        TableColumn<Volunteer, String> firstNameCol = new TableColumn<>("First Name");
+        firstNameCol.setCellValueFactory(new PropertyValueFactory<>("firstname"));
+        firstNameCol.setStyle("-fx-alignment: CENTER;");
+        firstNameCol.setPrefWidth(150);
+
+        // Last Name Column
+        TableColumn<Volunteer, String> lastNameCol = new TableColumn<>("Last Name");
+        lastNameCol.setCellValueFactory(new PropertyValueFactory<>("lastname"));
+        lastNameCol.setStyle("-fx-alignment: CENTER;");
+        lastNameCol.setPrefWidth(150);
+
+        // Phone Column
+        TableColumn<Volunteer, String> phoneCol = new TableColumn<>("Phone Number");
+        phoneCol.setCellValueFactory(new PropertyValueFactory<>("phoneNumber"));
+        phoneCol.setStyle("-fx-alignment: CENTER;");
+        phoneCol.setPrefWidth(150);
+
+        // Status Column
+        TableColumn<Volunteer, String> statusCol = new TableColumn<>("Status");
+        statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
+        statusCol.setStyle("-fx-alignment: CENTER;");
+        statusCol.setPrefWidth(100);
+        statusCol.setCellFactory(column -> new TableCell<>() {
+            @Override
+            protected void updateItem(String status, boolean empty) {
+                super.updateItem(status, empty);
+                if (empty || status == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(status);
+                    if (status.equals("ADDED")) {
+                        setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+                    } else if (status.equals("DELETED")) {
+                        setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+                    } else {
+                        setStyle("-fx-text-fill: black;");
+                    }
+                }
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            showAlert("Database Error", "Failed to load volunteers: " + e.getMessage());
-        }
+        });
 
-        return volunteersList;
+        // Action Column
+        TableColumn<Volunteer, Void> actionCol = new TableColumn<>("Actions");
+        actionCol.setPrefWidth(200);
+        actionCol.setStyle("-fx-alignment: CENTER;");
+        
+        actionCol.setCellFactory(param -> new TableCell<>() {
+            private final Button addButton = new Button("Add");
+            private final Button deleteButton = new Button("Delete");
+            private final HBox buttons = new HBox(5, addButton, deleteButton);
+
+            {
+                buttons.setAlignment(Pos.CENTER);
+                
+                // Style the buttons
+                addButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
+                deleteButton.setStyle("-fx-background-color: #F44336; -fx-text-fill: white;");
+                
+                // Add button action
+                addButton.setOnAction(event -> {
+                    Volunteer volunteer = getTableView().getItems().get(getIndex());
+                    volunteer.setStatus("ADDED");
+                    updateVolunteerStatusInDatabase(volunteer.getVolunteerId(), "ADDED");
+                    getTableView().refresh();
+                });
+                
+                // Delete button action
+                deleteButton.setOnAction(event -> {
+                    Volunteer volunteer = getTableView().getItems().get(getIndex());
+                    volunteer.setStatus("DELETED");
+                    deleteVolunteerFromDatabase(volunteer);
+                    getTableView().refresh();
+                });
+            }
+            private void updateVolunteerStatusInDatabase(int volunteerId, String status) {
+                String sql = "UPDATE volunteers SET status = ? WHERE volunteer_id = ?";
+                try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, status);
+                    pstmt.setInt(2, volunteerId);
+                    int rowsAffected = pstmt.executeUpdate();
+                    
+                    if (rowsAffected > 0) {
+                        System.out.println("Volunteer status updated successfully");
+                    } else {
+                        showAlert("Error", "No volunteer was updated.");
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    showAlert("Database Error", "Failed to update volunteer status: " + e.getMessage());
+                }
+            }
+            private void deleteVolunteerFromDatabase(Volunteer volunteer) {
+                String sql = "DELETE FROM volunteers WHERE volunteer_id = ?";
+                try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setInt(1, volunteer.getVolunteerId());
+                    int rowsAffected = pstmt.executeUpdate();
+                    
+                    if (rowsAffected > 0) {
+                        showAlert("Success", "Volunteer deleted successfully!");
+                    } else {
+                        showAlert("Error", "No volunteer was deleted.");
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    showAlert("Database Error", "Failed to delete volunteer: " + e.getMessage());
+                }
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    Volunteer volunteer = getTableView().getItems().get(getIndex());
+                    if (volunteer.getStatus().equals("PENDING")) {
+                        setGraphic(buttons);
+                    } else {
+                        setGraphic(null);
+                    }
+                }
+            }
+        });
+
+        volunteersTable.getColumns().addAll(idCol, eventIdCol, firstNameCol, lastNameCol, phoneCol, statusCol, actionCol);
+        volunteersTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
     }
-
-    
     private void loadEventForEdit() {
         String selectedEvent = editEventComboBox.getValue();
         if (selectedEvent == null || selectedEvent.trim().isEmpty()) {
@@ -1753,111 +1879,125 @@ public class AdminDashboard extends Application {
         return volunteersSection;
     }
 
-    private void setupVolunteersTableColumns() {
-        volunteersTable.getColumns().clear();
+  
 
-        // ID Column
-        TableColumn<Volunteer, Integer> idCol = new TableColumn<>("Volunteer ID");
-        idCol.setCellValueFactory(new PropertyValueFactory<>("volunteerId"));
-        idCol.setStyle("-fx-alignment: CENTER;");
-        idCol.setPrefWidth(100);
+   
+  
+   
+    
+    private VBox createDonationsSection() {
+        VBox donationsSection = new VBox(20);
+        donationsSection.setPadding(new Insets(20));
+        donationsSection.setAlignment(Pos.TOP_CENTER);
 
-        // Event ID Column
-        TableColumn<Volunteer, String> eventIdCol = new TableColumn<>("Event ID");
-        eventIdCol.setCellValueFactory(new PropertyValueFactory<>("eventId"));
-        eventIdCol.setStyle("-fx-alignment: CENTER;");
-        eventIdCol.setPrefWidth(100);
+        // Set background image
+        Image backgroundImage = new Image(BACKGROUND_IMAGE_URL);
+        BackgroundImage bgImage = new BackgroundImage(
+                backgroundImage,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(BackgroundSize.AUTO, BackgroundSize.AUTO, false, false, true, true)
+        );
+        donationsSection.setBackground(new Background(bgImage));
 
-        // First Name Column
-        TableColumn<Volunteer, String> firstNameCol = new TableColumn<>("First Name");
-        firstNameCol.setCellValueFactory(new PropertyValueFactory<>("firstname"));
-        firstNameCol.setStyle("-fx-alignment: CENTER;");
-        firstNameCol.setPrefWidth(150);
+        // Header
+        Label header = new Label("Donation Management");
+        header.setFont(Font.font("Roboto", FontWeight.BOLD, 28));
+        header.setStyle("-fx-text-fill: #FFFFFF;");
 
-        // Last Name Column
-        TableColumn<Volunteer, String> lastNameCol = new TableColumn<>("Last Name");
-        lastNameCol.setCellValueFactory(new PropertyValueFactory<>("lastname"));
-        lastNameCol.setStyle("-fx-alignment: CENTER;");
-        lastNameCol.setPrefWidth(150);
+        // Create tab pane for donations and allocations
+        TabPane tabPane = new TabPane();
+        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        // Phone Column
-        TableColumn<Volunteer, String> phoneCol = new TableColumn<>("Phone Number");
-        phoneCol.setCellValueFactory(new PropertyValueFactory<>("phoneNumber"));
-        phoneCol.setStyle("-fx-alignment: CENTER;");
-        phoneCol.setPrefWidth(150);
+        // Donations Tab
+        Tab donationsTab = new Tab("Donation Requests", createDonationsTable());
+        // Allocations Tab
+        Tab allocationsTab = new Tab("Allocation Requests", createAllocationsTable());
 
-        // Action Column with Add and Delete buttons
-        TableColumn<Volunteer, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(200);
-        actionCol.setStyle("-fx-alignment: CENTER;");
-        
-        actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button addButton = new Button("Add");
-            private final Button deleteButton = new Button("Delete");
-            private final HBox buttons = new HBox(5, addButton, deleteButton);
+        tabPane.getTabs().addAll(donationsTab, allocationsTab);
 
-            {
-                buttons.setAlignment(Pos.CENTER);
-                
-                // Style the buttons
-                addButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
-                deleteButton.setStyle("-fx-background-color: #F44336; -fx-text-fill: white;");
-                
-                // Add button action - just shows a message
-                addButton.setOnAction(event -> {
-                    Volunteer volunteer = getTableView().getItems().get(getIndex());
-                    showAlert("Success", "Volunteer added successfully!");
-                });
-                
-                // Delete button action - actually deletes from database
-                deleteButton.setOnAction(event -> {
-                    Volunteer volunteer = getTableView().getItems().get(getIndex());
-                    deleteVolunteer(volunteer);
-                });
-            }
-
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    setGraphic(buttons);
-                }
-            }
-        });
-
-        volunteersTable.getColumns().addAll(idCol, eventIdCol, firstNameCol, lastNameCol, phoneCol, actionCol);
-        
-        // Make columns resize equally
-        volunteersTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        donationsSection.getChildren().addAll(header, tabPane);
+        return donationsSection;
     }
+    private Pane createDonationsTable() {
+        VBox donationsPane = new VBox(10);
+        donationsPane.setPadding(new Insets(10));
 
-    private void deleteVolunteer(Volunteer volunteer) {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Confirm Deletion");
-        alert.setHeaderText("Are you sure you want to delete this volunteer?");
-        alert.setContentText("Volunteer: " + volunteer.getFirstname() + " " + volunteer.getLastname());
+        donationsTable = new TableView<>(); // Initialize the donations table
+        setupDonationsTableColumns(donationsTable);
 
-        Optional<ButtonType> result = alert.showAndWait();
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            deleteVolunteerFromDatabase(volunteer);
-            refreshVolunteersTable();
-        }
+        ObservableList<Donation> donations = getDonationsFromDatabase();
+        donationsTable.setItems(donations);
+
+        donationsPane.getChildren().add(donationsTable);
+        return donationsPane;
     }
+    private ObservableList<Donation> getDonationsFromDatabase() {
+        ObservableList<Donation> donations = FXCollections.observableArrayList();
+        String sql = "SELECT id, user_id, amount, payment_method, status, admin_response " +
+                     "FROM donations WHERE transaction_type = 'DONATION'";
 
-    private void deleteVolunteerFromDatabase(Volunteer volunteer) {
-        String sql = "DELETE FROM volunteers WHERE volunteer_id = ?";
         try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, volunteer.getVolunteerId());
-            pstmt.executeUpdate();
-            showAlert("Success", "Volunteer deleted successfully!");
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                donations.add(new Donation(
+                    rs.getInt("id"),
+                    rs.getString("user_id"),
+                    rs.getDouble("amount"),
+                    rs.getString("payment_method"),
+                    rs.getString("status"),
+                    rs.getString("admin_response")
+                ));
+            }
         } catch (SQLException e) {
             e.printStackTrace();
-            showAlert("Database Error", "Failed to delete volunteer: " + e.getMessage());
+            showAlert("Database Error", "Failed to fetch donations: " + e.getMessage());
         }
+        return donations;
     }
+    private ObservableList<Allocation> getAllocationsFromDatabase() {
+        ObservableList<Allocation> allocations = FXCollections.observableArrayList();
+        String sql = "SELECT id, user_id, amount, description, status, admin_response " +
+                     "FROM donations WHERE transaction_type = 'REQUEST'";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                allocations.add(new Allocation(
+                    rs.getInt("id"),
+                    rs.getString("user_id"),
+                    rs.getDouble("amount"),
+                    rs.getString("description"),
+                    rs.getString("status"),
+                    rs.getString("admin_response")
+                ));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            showAlert("Database Error", "Failed to fetch allocations: " + e.getMessage());
+        }
+        return allocations;
+    }
+   
+    private Pane createAllocationsTable() {
+        VBox allocationsPane = new VBox(10);
+        allocationsPane.setPadding(new Insets(10));
+
+        allocationsTable = new TableView<>(); // Initialize the allocations table
+        setupAllocationsTableColumns(allocationsTable);
+
+        ObservableList<Allocation> allocations = getAllocationsFromDatabase();
+        allocationsTable.setItems(allocations);
+
+        allocationsPane.getChildren().add(allocationsTable);
+        return allocationsPane;
+    }
+   
     // -------------------- Model Classes --------------------
     public static class News {
         private final int id;
@@ -1956,50 +2096,519 @@ public class AdminDashboard extends Application {
         }
     }
     public static class Volunteer {
-        private int volunteerId;
-        private String firstname;
-        private String lastname;
-        private String userId;
-        private String eventId;  // Changed to String to match your usage
-        private String phoneNumber;
+        private final SimpleIntegerProperty volunteerId;
+        private final SimpleStringProperty firstname;
+        private final SimpleStringProperty lastname;
+        private final SimpleStringProperty userId;
+        private final SimpleStringProperty eventId;
+        private final SimpleStringProperty phoneNumber;
+        private final SimpleStringProperty status;
 
-        // Constructor that matches your usage in line 1232
-        public Volunteer(int volunteerId, String firstname, String lastname, 
-                        String userId, String phoneNumber) {
-            this.volunteerId = volunteerId;
-            this.firstname = firstname;
-            this.lastname = lastname;
-            this.userId = userId;
-            this.phoneNumber = phoneNumber;
-        }
-
-        // Additional constructor if needed
         public Volunteer(int volunteerId, String firstname, String lastname, 
                         String userId, String eventId, String phoneNumber) {
-            this.volunteerId = volunteerId;
-            this.firstname = firstname;
-            this.lastname = lastname;
-            this.userId = userId;
-            this.eventId = eventId;
-            this.phoneNumber = phoneNumber;
+            this.volunteerId = new SimpleIntegerProperty(volunteerId);
+            this.firstname = new SimpleStringProperty(firstname);
+            this.lastname = new SimpleStringProperty(lastname);
+            this.userId = new SimpleStringProperty(userId);
+            this.eventId = new SimpleStringProperty(eventId);
+            this.phoneNumber = new SimpleStringProperty(phoneNumber);
+            this.status = new SimpleStringProperty("PENDING"); // Default status
         }
 
-        // Getters and setters
-        public int getVolunteerId() { return volunteerId; }
-        public void setVolunteerId(int volunteerId) { this.volunteerId = volunteerId; }
+        // Getters
+        public int getVolunteerId() { return volunteerId.get(); }
+        public String getFirstname() { return firstname.get(); }
+        public String getLastname() { return lastname.get(); }
+        public String getUserId() { return userId.get(); }
+        public String getEventId() { return eventId.get(); }
+        public String getPhoneNumber() { return phoneNumber.get(); }
+        public String getStatus() { return status.get(); }
+
+        // Setters
+        public void setStatus(String status) { this.status.set(status); }
+
+        // Property getters
+        public SimpleIntegerProperty volunteerIdProperty() { return volunteerId; }
+        public SimpleStringProperty firstnameProperty() { return firstname; }
+        public SimpleStringProperty lastnameProperty() { return lastname; }
+        public SimpleStringProperty userIdProperty() { return userId; }
+        public SimpleStringProperty eventIdProperty() { return eventId; }
+        public SimpleStringProperty phoneNumberProperty() { return phoneNumber; }
+        public SimpleStringProperty statusProperty() { return status; }
+    }
         
-        public String getFirstname() { return firstname; }
-        public void setFirstname(String firstname) { this.firstname = firstname; }
+    private ObservableList<Volunteer> getVolunteersListFromDatabase() {
+        ObservableList<Volunteer> volunteersList = FXCollections.observableArrayList();
+        String sql = "SELECT volunteer_id, firstname, lastname, user_id, event_id, ph_no, status FROM volunteers";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                Volunteer volunteer = new Volunteer(
+                    rs.getInt("volunteer_id"),
+                    rs.getString("firstname"),
+                    rs.getString("lastname"),
+                    rs.getString("user_id"),
+                    rs.getString("event_id"),
+                    rs.getString("ph_no")
+                );
+                // Set the status from database or default to "PENDING"
+                String status = rs.getString("status");
+                volunteer.setStatus(status != null ? status : "PENDING");
+                volunteersList.add(volunteer);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            showAlert("Database Error", "Failed to load volunteers: " + e.getMessage());
+        }
+
+        return volunteersList;
+    }
         
-        public String getLastname() { return lastname; }
-        public void setLastname(String lastname) { this.lastname = lastname; }
         
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
         
-        public String getEventId() { return eventId; }
-        public void setEventId(String eventId) { this.eventId = eventId; }
         
-        public String getPhoneNumber() { return phoneNumber; }
-        public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
-    }}
+        
+        
+      
+       
+        public static class Donation {
+            private final SimpleIntegerProperty id;
+            private final SimpleStringProperty userId;
+            private final SimpleDoubleProperty amount;
+            private final SimpleStringProperty paymentMethod;
+            private final SimpleStringProperty status;
+            private final SimpleStringProperty adminResponse;
+
+            // Constructor with all fields
+            public Donation(int id, String userId, double amount, String paymentMethod, 
+                           String status, String adminResponse) {
+                this.id = new SimpleIntegerProperty(id);
+                this.userId = new SimpleStringProperty(userId);
+                this.amount = new SimpleDoubleProperty(amount);
+                this.paymentMethod = new SimpleStringProperty(paymentMethod);
+                this.status = new SimpleStringProperty(status);
+                this.adminResponse = new SimpleStringProperty(adminResponse);
+            }
+
+            // Getters
+            public int getId() { return id.get(); }
+            public String getUserId() { return userId.get(); }
+            public double getAmount() { return amount.get(); }
+            public String getPaymentMethod() { return paymentMethod.get(); }
+            public String getStatus() { return status.get(); }
+            public String getAdminResponse() { return adminResponse.get(); }
+
+            // Setters
+            public void setStatus(String status) { this.status.set(status); }
+            public void setAdminResponse(String response) { this.adminResponse.set(response); }
+
+            // Property getters
+            public SimpleIntegerProperty idProperty() { return id; }
+            public SimpleStringProperty userIdProperty() { return userId; }
+            public SimpleDoubleProperty amountProperty() { return amount; }
+            public SimpleStringProperty paymentMethodProperty() { return paymentMethod; }
+            public SimpleStringProperty statusProperty() { return status; }
+            public SimpleStringProperty adminResponseProperty() { return adminResponse; }
+        }
+        public static class Allocation {
+            private final SimpleIntegerProperty id;
+            private final SimpleStringProperty userId;
+            private final SimpleDoubleProperty amount;
+            private final SimpleStringProperty description;
+            private final SimpleStringProperty status;
+            private final SimpleStringProperty adminResponse;
+
+            // Constructor with all fields
+            public Allocation(int id, String userId, double amount, String description,
+                             String status, String adminResponse) {
+                this.id = new SimpleIntegerProperty(id);
+                this.userId = new SimpleStringProperty(userId);
+                this.amount = new SimpleDoubleProperty(amount);
+                this.description = new SimpleStringProperty(description);
+                this.status = new SimpleStringProperty(status);
+                this.adminResponse = new SimpleStringProperty(adminResponse);
+            }
+
+            // Getters
+            public int getId() { return id.get(); }
+            public String getUserId() { return userId.get(); }
+            public double getAmount() { return amount.get(); }
+            public String getDescription() { return description.get(); }
+            public String getStatus() { return status.get(); }
+            public String getAdminResponse() { return adminResponse.get(); }
+
+            // Setters
+            public void setStatus(String status) { this.status.set(status); }
+            public void setAdminResponse(String response) { this.adminResponse.set(response); }
+
+            // Property getters
+            public SimpleIntegerProperty idProperty() { return id; }
+            public SimpleStringProperty userIdProperty() { return userId; }
+            public SimpleDoubleProperty amountProperty() { return amount; }
+            public SimpleStringProperty descriptionProperty() { return description; }
+            public SimpleStringProperty statusProperty() { return status; }
+            public SimpleStringProperty adminResponseProperty() { return adminResponse; }
+        }
+       
+        private void setupDonationsTableColumns(TableView<Donation> table) {
+            table.getColumns().clear();
+
+            // ID Column
+            TableColumn<Donation, Integer> idCol = new TableColumn<>("ID");
+            idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
+            idCol.setStyle("-fx-alignment: CENTER;");
+            idCol.setPrefWidth(80);
+
+            // User ID Column
+            TableColumn<Donation, String> userIdCol = new TableColumn<>("User ID");
+            userIdCol.setCellValueFactory(new PropertyValueFactory<>("userId"));
+            userIdCol.setStyle("-fx-alignment: CENTER;");
+            userIdCol.setPrefWidth(100);
+
+            // Amount Column
+            TableColumn<Donation, Double> amountCol = new TableColumn<>("Amount");
+            amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
+            amountCol.setStyle("-fx-alignment: CENTER;");
+            amountCol.setPrefWidth(100);
+            amountCol.setCellFactory(tc -> new TableCell<>() {
+                @Override
+                protected void updateItem(Double amount, boolean empty) {
+                    super.updateItem(amount, empty);
+                    setText(empty || amount == null ? null : String.format("₹%,.2f", amount));
+                }
+            });
+
+            // Payment Method Column
+            TableColumn<Donation, String> methodCol = new TableColumn<>("Payment Method");
+            methodCol.setCellValueFactory(new PropertyValueFactory<>("paymentMethod"));
+            methodCol.setStyle("-fx-alignment: CENTER;");
+            methodCol.setPrefWidth(150);
+
+            // Status/Action Column
+            TableColumn<Donation, String> actionCol = new TableColumn<>("Status/Actions");
+            actionCol.setCellValueFactory(cellData -> {
+                String status = cellData.getValue().getStatus();
+                if (status.equals("PENDING")) {
+                    return new SimpleStringProperty("");
+                } else {
+                    return new SimpleStringProperty(status);
+                }
+            });
+            actionCol.setCellFactory(column -> new TableCell<>() {
+                private final Button acceptBtn = new Button("Accept");
+                private final Button rejectBtn = new Button("Reject");
+                private final HBox buttons = new HBox(10, acceptBtn, rejectBtn);
+                private final Label statusLabel = new Label();
+
+                {
+                    buttons.setAlignment(Pos.CENTER);
+                    acceptBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
+                    rejectBtn.setStyle("-fx-background-color: #F44336; -fx-text-fill: white;");
+                    
+                    statusLabel.setStyle("-fx-font-weight: bold;");
+                    statusLabel.setAlignment(Pos.CENTER);
+                    statusLabel.setMaxWidth(Double.MAX_VALUE);
+                    
+                    acceptBtn.setOnAction(event -> {
+                        Donation donation = getTableView().getItems().get(getIndex());
+                        handleAcceptDonation(donation);
+                    });
+                    
+                    rejectBtn.setOnAction(event -> {
+                        Donation donation = getTableView().getItems().get(getIndex());
+                        handleRejectDonation(donation);
+                    });
+                }
+
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        setGraphic(null);
+                    } else {
+                        Donation donation = getTableView().getItems().get(getIndex());
+                        if (donation.getStatus().equals("PENDING")) {
+                            setGraphic(buttons);
+                            statusLabel.setText("");
+                        } else {
+                            statusLabel.setText(donation.getStatus());
+                            if (donation.getStatus().equals("ACCEPTED")) {
+                                statusLabel.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+                            } else {
+                                statusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+                            }
+                            setGraphic(statusLabel);
+                        }
+                    }
+                }
+            });
+            actionCol.setPrefWidth(200);
+
+            table.getColumns().addAll(idCol, userIdCol, amountCol, methodCol, actionCol);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        }
+
+        private void handleAcceptDonation(Donation donation) {
+            String sql = "UPDATE donations SET status = 'ACCEPTED', admin_response = 'Donation accepted' " +
+                         "WHERE id = ? AND transaction_type = 'DONATION'";
+            
+            try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                
+                pstmt.setInt(1, donation.getId());
+                int rowsAffected = pstmt.executeUpdate();
+                
+                if (rowsAffected > 0) {
+                    Platform.runLater(() -> {
+                        donation.setStatus("ACCEPTED");
+                        donationsTable.refresh();
+                        showAlert("Success", "Donation ID " + donation.getId() + " has been accepted!");
+                    });
+                } else {
+                    showAlert("Error", "No donation was updated.");
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+                showAlert("Database Error", "Failed to accept donation: " + e.getMessage());
+            }
+        }
+
+        private void handleRejectDonation(Donation donation) {
+            TextInputDialog dialog = new TextInputDialog();
+            dialog.setTitle("Reject Donation");
+            dialog.setHeaderText("Rejecting Donation ID: " + donation.getId());
+            dialog.setContentText("Reason for rejection:");
+
+            Optional<String> result = dialog.showAndWait();
+            if (result.isPresent() && !result.get().trim().isEmpty()) {
+                String reason = "Rejected: " + result.get().trim();
+                String sql = "UPDATE donations SET status = 'REJECTED', admin_response = ? " +
+                             "WHERE id = ? AND transaction_type = 'DONATION'";
+                
+                try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    
+                    pstmt.setString(1, reason);
+                    pstmt.setInt(2, donation.getId());
+                    int rowsAffected = pstmt.executeUpdate();
+                    
+                    if (rowsAffected > 0) {
+                        Platform.runLater(() -> {
+                            donation.setStatus("REJECTED");
+                            donationsTable.refresh();
+                            showAlert("Success", "Donation ID " + donation.getId() + " has been rejected!");
+                        });
+                    } else {
+                        showAlert("Error", "No donation was updated.");
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    showAlert("Database Error", "Failed to reject donation: " + e.getMessage());
+                }
+            }
+        }
+
+
+        private void handleApproveAllocation(Allocation allocation) {
+            String sql = "UPDATE donations SET status = 'APPROVED', admin_response = 'Request approved' " +
+                         "WHERE id = ? AND transaction_type = 'REQUEST'";
+            
+            try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                
+                pstmt.setInt(1, allocation.getId());
+                int rowsAffected = pstmt.executeUpdate();
+                
+                if (rowsAffected > 0) {
+                    Platform.runLater(() -> {
+                        allocation.setStatus("APPROVED");
+                        allocationsTable.refresh();
+                        showAlert("Success", "Allocation ID " + allocation.getId() + " has been approved!");
+                    });
+                } else {
+                    showAlert("Error", "No allocation was updated.");
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+                showAlert("Database Error", "Failed to approve allocation: " + e.getMessage());
+            }
+        }
+
+        private void handleDenyAllocation(Allocation allocation) {
+            TextInputDialog dialog = new TextInputDialog();
+            dialog.setTitle("Deny Allocation");
+            dialog.setHeaderText("Denying Allocation ID: " + allocation.getId());
+            dialog.setContentText("Reason for denial:");
+
+            Optional<String> result = dialog.showAndWait();
+            if (result.isPresent() && !result.get().trim().isEmpty()) {
+                String reason = "Denied: " + result.get().trim();
+                String sql = "UPDATE donations SET status = 'DENIED', admin_response = ? " +
+                             "WHERE id = ? AND transaction_type = 'REQUEST'";
+                
+                try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASSWORD);
+                     PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    
+                    pstmt.setString(1, reason);
+                    pstmt.setInt(2, allocation.getId());
+                    int rowsAffected = pstmt.executeUpdate();
+                    
+                    if (rowsAffected > 0) {
+                        Platform.runLater(() -> {
+                            allocation.setStatus("DENIED");
+                            allocationsTable.refresh();
+                            showAlert("Success", "Allocation ID " + allocation.getId() + " has been denied!");
+                        });
+                    } else {
+                        showAlert("Error", "No allocation was updated.");
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    showAlert("Database Error", "Failed to deny allocation: " + e.getMessage());
+                }
+            }
+        
+        }
+        private void setupAllocationsTableColumns(TableView<Allocation> table) {
+            table.getColumns().clear();
+
+            // ID Column
+            TableColumn<Allocation, Integer> idCol = new TableColumn<>("ID");
+            idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
+            idCol.setStyle("-fx-alignment: CENTER;");
+            idCol.setPrefWidth(80);
+
+            // User ID Column
+            TableColumn<Allocation, String> userIdCol = new TableColumn<>("User ID");
+            userIdCol.setCellValueFactory(new PropertyValueFactory<>("userId"));
+            userIdCol.setStyle("-fx-alignment: CENTER;");
+            userIdCol.setPrefWidth(100);
+
+            // Amount Column
+            TableColumn<Allocation, Double> amountCol = new TableColumn<>("Amount");
+            amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
+            amountCol.setStyle("-fx-alignment: CENTER;");
+            amountCol.setPrefWidth(150);
+            amountCol.setCellFactory(tc -> new TableCell<>() {
+                @Override
+                protected void updateItem(Double amount, boolean empty) {
+                    super.updateItem(amount, empty);
+                    setText(empty || amount == null ? null : String.format("₹%,.2f", amount));
+                }
+            });
+
+            // Purpose Column with text wrapping and tooltip
+            TableColumn<Allocation, String> purposeCol = new TableColumn<>("Purpose");
+            purposeCol.setCellValueFactory(new PropertyValueFactory<>("description"));
+            purposeCol.setPrefWidth(250);
+            purposeCol.setCellFactory(tc -> new TableCell<>() {
+                private final Text text = new Text();
+                private final StackPane pane = new StackPane(text);
+                private Tooltip tooltip = null;
+                
+                {
+                    text.wrappingWidthProperty().bind(purposeCol.widthProperty().subtract(15));
+                    pane.setPadding(new Insets(5));
+                    pane.setStyle("-fx-background-color: transparent;");
+                    
+                    // Show tooltip on hover
+                    pane.setOnMouseEntered(e -> {
+                        if (text.getText() != null && !text.getText().isEmpty()) {
+                            tooltip = new Tooltip(text.getText());
+                            tooltip.setStyle("-fx-font-size: 12px; -fx-max-width: 400px; -fx-wrap-text: true;");
+                            Tooltip.install(pane, tooltip);
+                        }
+                    });
+                    
+                    // Remove tooltip when mouse exits
+                    pane.setOnMouseExited(e -> {
+                        if (tooltip != null) {
+                            Tooltip.uninstall(pane, tooltip);
+                            tooltip = null;
+                        }
+                    });
+                }
+
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        setGraphic(null);
+                        if (tooltip != null) {
+                            Tooltip.uninstall(pane, tooltip);
+                            tooltip = null;
+                        }
+                    } else {
+                        text.setText(item);
+                        setGraphic(pane);
+                    }
+                }
+            });
+
+            // Status/Action Column
+            TableColumn<Allocation, String> actionCol = new TableColumn<>("Status/Actions");
+            actionCol.setCellValueFactory(cellData -> {
+                String status = cellData.getValue().getStatus();
+                if (status.equals("PENDING")) {
+                    return new SimpleStringProperty("");
+                } else {
+                    return new SimpleStringProperty(status);
+                }
+            });
+            actionCol.setCellFactory(column -> new TableCell<>() {
+                private final Button approveBtn = new Button("Approve");
+                private final Button denyBtn = new Button("Deny");
+                private final HBox buttons = new HBox(10, approveBtn, denyBtn);
+                private final Label statusLabel = new Label();
+
+                {
+                    buttons.setAlignment(Pos.CENTER);
+                    approveBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
+                    denyBtn.setStyle("-fx-background-color: #F44336; -fx-text-fill: white;");
+                    
+                    statusLabel.setStyle("-fx-font-weight: bold;");
+                    statusLabel.setAlignment(Pos.CENTER);
+                    statusLabel.setMaxWidth(Double.MAX_VALUE);
+                    statusLabel.setPadding(new Insets(5));
+                    
+                    approveBtn.setOnAction(event -> {
+                        Allocation allocation = getTableView().getItems().get(getIndex());
+                        handleApproveAllocation(allocation);
+                    });
+                    
+                    denyBtn.setOnAction(event -> {
+                        Allocation allocation = getTableView().getItems().get(getIndex());
+                        handleDenyAllocation(allocation);
+                    });
+                }
+
+                @Override
+                protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        setGraphic(null);
+                    } else {
+                        Allocation allocation = getTableView().getItems().get(getIndex());
+                        if (allocation.getStatus().equals("PENDING")) {
+                            setGraphic(buttons);
+                            statusLabel.setText("");
+                        } else {
+                            statusLabel.setText(allocation.getStatus());
+                            if (allocation.getStatus().equals("APPROVED")) {
+                                statusLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-background-color: #4CAF50; -fx-padding: 5px;");
+                            } else {
+                                statusLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-background-color: #F44336; -fx-padding: 5px;");
+                            }
+                            setGraphic(statusLabel);
+                        }
+                    }
+                }
+            });
+            actionCol.setPrefWidth(200);
+
+            table.getColumns().addAll(idCol, userIdCol, amountCol, purposeCol, actionCol);
+            table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        }}
