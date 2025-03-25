@@ -1,8 +1,9 @@
 package admin;
 
+import javafx.application.Platform;
+import javafx.scene.control.Alert;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -19,35 +20,43 @@ public class DatabaseManager {
         return connection;
     }
 
-    public static void initializeDatabase() throws SQLException {
+    private static void showAlert(String title, String message) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle(title);
+            alert.setHeaderText(null);
+            alert.setContentText(message);
+            alert.showAndWait();
+        });
+    }
+
+    public static void initializeDatabase() {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             
-            // Create tables
-            stmt.execute("CREATE TABLE IF NOT EXISTS events (" +
-                "event_id INT AUTO_INCREMENT PRIMARY KEY, " +
-                "title VARCHAR(255) NOT NULL)");
+            String createDonationsTable = "CREATE TABLE IF NOT EXISTS donations (" +
+                "donation_id INT AUTO_INCREMENT PRIMARY KEY, " +
+                "donor_name VARCHAR(255) NOT NULL, " +
+                "item_type VARCHAR(255) NOT NULL, " +
+                "quantity VARCHAR(50) NOT NULL, " +
+                "donation_date DATE NOT NULL, " +
+                "status VARCHAR(50) NOT NULL, " +
+                "contact_number VARCHAR(20) NOT NULL)";
+                
+            String createAllocationsTable = "CREATE TABLE IF NOT EXISTS allocations (" +
+                "allocation_id INT AUTO_INCREMENT PRIMARY KEY, " +
+                "donation_id INT NOT NULL, " +
+                "allocated_to VARCHAR(255) NOT NULL, " +
+                "allocation_date DATE NOT NULL, " +
+                "status VARCHAR(50) NOT NULL, " +
+                "FOREIGN KEY (donation_id) REFERENCES donations(donation_id))";
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS volunteers (" +
-                "volunteer_id INT AUTO_INCREMENT PRIMARY KEY, " +
-                "firstname VARCHAR(255) NOT NULL, " +
-                "lastname VARCHAR(255) NOT NULL, " +
-                "user_id VARCHAR(255) NOT NULL, " +
-                "event_id INT, " +
-                "ph_no VARCHAR(20) NOT NULL)");
-
-            // Add foreign key constraint if tables exist
-            ResultSet eventsTable = conn.getMetaData().getTables(null, null, "events", null);
-            ResultSet volunteersTable = conn.getMetaData().getTables(null, null, "volunteers", null);
+            stmt.execute(createDonationsTable);
+            stmt.execute(createAllocationsTable);
             
-            if (eventsTable.next() && volunteersTable.next()) {
-                try {
-                    stmt.execute("ALTER TABLE volunteers ADD CONSTRAINT fk_volunteer_event " +
-                               "FOREIGN KEY (event_id) REFERENCES events(event_id)");
-                } catch (SQLException e) {
-                    System.out.println("Foreign key constraint already exists or could not be created");
-                }
-            }
+        } catch (SQLException e) {
+            showAlert("Database Error", "Failed to initialize database: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -57,7 +66,7 @@ public class DatabaseManager {
                 connection.close();
             }
         } catch (SQLException e) {
-            System.err.println("Error closing connection: " + e.getMessage());
+            showAlert("Connection Error", "Error closing database connection: " + e.getMessage());
         }
     }
 }
