@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+<?import javafx.scene.shape.*?>
+
+<AnchorPane prefHeight="706.0" prefWidth="1407.0" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="DonationController">
+   <children>
+      <!-- Sidebar Background -->
+      <Rectangle arcHeight="5.0" arcWidth="5.0" fill="#2b3d52" height="709.0" layoutX="-2.0" layoutY="-3.0" stroke="BLACK" strokeType="INSIDE" width="179.0" />
+      
+      <!-- Sidebar Buttons -->
+      <Button layoutX="1.0" layoutY="38.0" prefHeight="54.0" prefWidth="176.0" style="-fx-background-color: #506d85; -fx-text-fill: white;" text="NEWS">
+         <font>
+            <Font name="Poppins SemiBold" size="22.0" />
+         </font>
+      </Button>
+      
+      <Button layoutX="-1.0" layoutY="121.0" prefHeight="54.0" prefWidth="177.0" style="-fx-background-color: #506d85; -fx-text-fill: white;" text="EVENTS">
+         <font>
+            <Font name="Poppins SemiBold" size="22.0" />
+         </font>
+      </Button>
+
+      <Button layoutX="-3.0" layoutY="204.0" prefHeight="54.0" prefWidth="180.0" style="-fx-background-color: #5a748a; -fx-text-fill: white;" text="DONATION">
+         <font>
+            <Font name="Poppins SemiBold" size="22.0" />
+         </font>
+      </Button>
+
+      <Button fx:id="logoutButton" layoutX="-6.0" layoutY="632.0" prefHeight="54.0" prefWidth="183.0" 
+              style="-fx-background-color: #d9534f; -fx-text-fill: white;" text="LOG OUT">
+         <font>
+            <Font name="Poppins SemiBold" size="22.0" />
+         </font>
+      </Button>
+
+      <!-- Main Content -->
+      <AnchorPane layoutX="176.0" prefHeight="706.0" prefWidth="1233.0" style="-fx-background-color: #f5f5f5;">
+         <!-- Header -->
+         <VBox layoutX="0.0" layoutY="0.0" prefHeight="110.0" prefWidth="1233.0" style="-fx-background-color: #cdd4e0;">
+            <Text fill="#1a1a40" text="DONATIONS">
+               <font>
+                  <Font name="Poppins SemiBold" size="70.0" />
+               </font>
+            </Text>
+         </VBox>
+
+         <!-- Donation Form -->
+         <VBox layoutX="200.0" layoutY="150.0" spacing="20.0" prefWidth="800.0">
+            <Text fill="#555555" text="&quot;Your contribution makes a difference&quot;" style="-fx-font-size: 18; -fx-font-family: 'Poppins Regular';"/>
+            
+            <!-- User ID -->
+            <VBox spacing="5.0">
+               <Label text="User ID:" style="-fx-font-weight: bold; -fx-font-size: 16px;"/>
+               <TextField fx:id="userIdField" promptText="Enter your User ID" prefWidth="400.0"/>
+            </VBox>
+            
+            <!-- Payment Method -->
+            <VBox spacing="5.0">
+               <Label text="Payment Method:" style="-fx-font-weight: bold; -fx-font-size: 16px;"/>
+               <ComboBox fx:id="paymentMethodComboBox" prefWidth="400.0"/>
+            </VBox>
+            
+            <!-- Amount Selection -->
+            <VBox spacing="10.0">
+               <Label text="Select Amount:" style="-fx-font-weight: bold; -fx-font-size: 16px;"/>
+               <HBox spacing="15.0">
+                  <Button fx:id="amount500Btn" text="₹500" style="-fx-background-color: #5a748a; -fx-text-fill: white;"/>
+                  <Button fx:id="amount1000Btn" text="₹1000" style="-fx-background-color: #5a748a; -fx-text-fill: white;"/>
+                  <Button fx:id="amount2000Btn" text="₹2000" style="-fx-background-color: #5a748a; -fx-text-fill: white;"/>
+                  <Button fx:id="amount3000Btn" text="₹3000" style="-fx-background-color: #5a748a; -fx-text-fill: white;"/>
+                  <Button fx:id="amount5000Btn" text="₹5000" style="-fx-background-color: #5a748a; -fx-text-fill: white;"/>
+               </HBox>
+               <HBox spacing="15.0" alignment="CENTER_LEFT">
+                  <Label text="Other Amount:"/>
+                  <TextField fx:id="otherAmountField" promptText="₹" prefWidth="150.0"/>
+               </HBox>
+            </VBox>
+            
+            <!-- Action Buttons -->
+            <HBox spacing="30.0" alignment="CENTER">
+               <Button fx:id="makeDonationButton" text="MAKE DONATION" style="-fx-background-color: #5cb85c; -fx-text-fill: white; -fx-font-size: 18px; -fx-padding: 12px 30px;"/>
+               <Button fx:id="requestDonationButton" text="REQUEST DONATION" style="-fx-background-color: #5a748a; -fx-text-fill: white; -fx-font-size: 18px; -fx-padding: 12px 30px;"/>
+            </HBox>
+         </VBox>
+      </AnchorPane>
+   </children>
+</AnchorPane>
